@@ -64,10 +64,25 @@ int main()
 
 	// ---Receiving---
 	char buf[BUFLEN];
-	int byte_count;
-	byte_count = recv(newfd, buf, BUFLEN, 0);
-	// ---------------
 
+	std::string msg = "";
+	int byte_count;
+	int buf_pos = 0;
+	while ((byte_count = recv(newfd, buf, BUFLEN, 0)) != 0)
+	{
+		std::string curr_buf(buf);
+		msg += curr_buf.substr(buf_pos, byte_count - 1);
+		buf_pos += byte_count;
+		if (byte_count < BUFLEN)
+		{
+			break;
+		}
+	}
+	const char *msg_tmp = msg.c_str();
+	char *ch_msg = _strdup(msg_tmp);
+
+	// ---------------
+	printf(ch_msg);
 	// ------------CLIENT SIDE------------
 	// Received HTTP GET request ignored (for now)
 	char magic_url[] = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
@@ -77,22 +92,53 @@ int main()
 	char *server_hostname = extract_host_name(new_site);
 
 	struct in_addr server_addr;
+	struct addrinfo server_hints, *server_res, *p;
 
-	if ((err = getaddrinfo(hostname, port, &hints, &res)) != 0)
+	memset(&server_hints, 0, sizeof(server_hints));
+	server_hints.ai_socktype = SOCK_STREAM;
+	server_hints.ai_family = AF_INET;
+
+	if ((err = getaddrinfo(server_hostname, "80", &server_hints, &server_res)) != 0)
 	{
-		printf("error %d\n", err);
+		printf("Error during server getaddrinfo() %d\n", err);
 		return 1;
 	}
 
-	addr.S_un = ((struct sockaddr_in *)(res->ai_addr))->sin_addr.S_un;
+	server_addr.S_un = ((struct sockaddr_in *)(server_res->ai_addr))->sin_addr.S_un;
 
-	printf("ip address : %s\n", inet_ntoa(addr));
-
-	// If we want to clear:
-	//freeaddrinfo(res);
+	printf("Server IP address : %s\n", inet_ntoa(server_addr));
 	// ----------------
 
+	// Make a socket using the information received from getaddrinfo
+	int server_sockfd;
+	server_sockfd = socket(server_res->ai_family, server_res->ai_socktype, server_res->ai_protocol);
+
+	// Loop through all the results and connect to the first available
+	for (p = server_res; p != NULL; p = p->ai_next) {
+		if ((server_sockfd = socket(p->ai_family, p->ai_socktype,
+			p->ai_protocol)) == -1) {
+			perror("Error during client socket assignment");
+			continue;
+		}
+
+		if (connect(server_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+			closesocket(server_sockfd);
+			perror("Error during client connection to server");
+			continue;
+		}
+
+		break;
+	}
+
+	if (p == NULL) {
+		fprintf(stderr, "Client: failed to connect to web server\n");
+		return 2;
+	}
+
 	// ---Sending---
+	// INNAN DETTA: url-filtrering (+ connection close)
+	int len = strlen(ch_msg);
+	int bytes_sent = send(server_sockfd, ch_msg, len, 0);
 	// -------------
 
 	// -----------------------------------
