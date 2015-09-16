@@ -4,10 +4,13 @@
 #include <winsock2.h>
 #include <WS2tcpip.h>
 #include <string>
+#include <algorithm>
 
-#define BUFLEN 512
+#define BUFLEN 1024
 
 char *extract_host_name(std::string full_url);
+int set_connection_type(std::string *msg, std::string type);
+bool replace(std::string& str, const std::string& from, const std::string& to);
 
 int main()
 {
@@ -78,6 +81,11 @@ int main()
 			break;
 		}
 	}
+	// ---Filtering---
+	set_connection_type(&msg, "close");
+	//match_phrase(msg, "keep-alive");
+	// ---------------
+	msg += "\n";
 	const char *msg_tmp = msg.c_str();
 	char *ch_msg = _strdup(msg_tmp);
 
@@ -140,9 +148,32 @@ int main()
 	int len = strlen(ch_msg);
 	int bytes_sent = send(server_sockfd, ch_msg, len, 0);
 	// -------------
-
+	// --------------------------
+	// ---Receiving---
+	char server_buf[BUFLEN];
+	
+	std::string server_msg = "";
+	int server_byte_count;
+	int server_buf_pos = 0;
+	while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
+	{
+		std::string curr_buf(server_buf);
+		server_msg += curr_buf.substr(server_buf_pos, server_byte_count - 1);
+		server_buf_pos += server_byte_count;
+		/*if (server_byte_count < BUFLEN)
+		{
+			break;
+		}*/
+	}
+	closesocket(server_sockfd);
+	//server_msg += "\n";
+	std::cout << server_msg;
 	// -----------------------------------
 
+	const char *server_msg_tmp = server_msg.c_str();
+	char *server_ch_msg = _strdup(server_msg_tmp);
+	int server_len = strlen(server_ch_msg);
+	int client_bytes_sent = send(sockfd, server_ch_msg, server_len, 0);
 
 	WSACleanup();
 	return 0;
@@ -173,4 +204,48 @@ char *extract_host_name(std::string full_url)
 	const char *hostname = host.c_str();
 
 	return _strdup(hostname);
+}
+
+int set_connection_type(std::string *msg, std::string type)
+{
+	std::string tmp_msg = *msg;
+	//std::transform(tmp_msg.begin(), tmp_msg.end(), tmp_msg.begin(), ::tolower);
+
+	if (type == "close")
+	{
+		if (replace(tmp_msg, "Connection: keep-alive", "Connection: close"))
+		{
+			*msg = tmp_msg;
+			return 0;
+		}
+		else
+		{
+			return 1;
+		}
+	}
+	else if (type == "keep-alive")
+	{
+		if (replace(tmp_msg, "Connection: close", "Connection: keep-alive"))
+		{
+			*msg = tmp_msg;
+			return 0;
+		}
+		else
+		{
+			return 1;
+		}
+	}
+	else
+	{
+		return 1;
+	}
+}
+
+bool replace(std::string& str, const std::string& from, const std::string& to)
+{
+	size_t start_pos = str.find(from);
+	if (start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
 }
