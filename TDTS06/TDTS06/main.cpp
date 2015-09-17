@@ -6,11 +6,12 @@
 #include <string>
 #include <algorithm>
 
-#define BUFLEN 1024
+#define BUFLEN 8192
 
 char *extract_host_name(std::string full_url);
 int set_connection_type(std::string *msg, std::string type);
 bool replace(std::string& str, const std::string& from, const std::string& to);
+bool is_plaintext(std::string str_buf);
 
 int main()
 {
@@ -20,160 +21,195 @@ int main()
 
 	char *hostname = "localhost";
 	char *port = "3334"; // Port in broswer to listen to.
-	struct in_addr addr;
-	struct addrinfo hints, *res;
-	int err;
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_family = AF_INET;
-
-	if ((err = getaddrinfo(hostname, port, &hints, &res)) != 0)
+	while (true)
 	{
-		printf("Error during getaddrinfo() %d\n", err);
-		return 1;
-	}
+		
+		struct in_addr addr;
+		struct addrinfo hints, *res;
+		int err;
 
-	addr.S_un = ((struct sockaddr_in *)(res->ai_addr))->sin_addr.S_un;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_socktype = SOCK_STREAM;
+		hints.ai_family = AF_INET;
 
-	printf("Local IP address : %s\n", inet_ntoa(addr));
-
-	// Make a socket using the information received from getaddrinfo
-	int sockfd;
-	sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-
-	// Bind socket to port
-	if ((err = bind(sockfd, res->ai_addr, res->ai_addrlen)) != 0)
-	{
-		printf("Error during bind() %d\n", err);
-		return 1;
-	}
-	// -----------
-
-	// ---Listening, accepting---
-	int backlog = 20;
-	if ((err = listen(sockfd, backlog)) != 0)
-	{
-		printf("Error during listen() %d\n", err);
-		return 1;
-	}
-
-	struct sockaddr_storage their_addr;
-	socklen_t addr_size;
-	int newfd;
-	addr_size = sizeof(their_addr);
-	newfd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
-	// --------------------------
-
-	// ---Receiving---
-	char buf[BUFLEN];
-
-	std::string msg = "";
-	int byte_count;
-	int buf_pos = 0;
-	while ((byte_count = recv(newfd, buf, BUFLEN, 0)) != 0)
-	{
-		std::string curr_buf(buf);
-		msg += curr_buf.substr(buf_pos, byte_count - 1);
-		buf_pos += byte_count;
-		if (byte_count < BUFLEN)
+		if ((err = getaddrinfo(hostname, port, &hints, &res)) != 0)
 		{
-			break;
-		}
-	}
-	// ---Filtering---
-	set_connection_type(&msg, "close");
-	//match_phrase(msg, "keep-alive");
-	// ---------------
-	msg += "\n";
-	const char *msg_tmp = msg.c_str();
-	char *ch_msg = _strdup(msg_tmp);
-
-	// ---------------
-	printf(ch_msg);
-	// ------------CLIENT SIDE------------
-	// Received HTTP GET request ignored (for now)
-	char magic_url[] = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
-	//int url_len = sizeof(magic_url) / sizeof(char);
-	std::string new_site(magic_url);
-	// ---IP Look-up---
-	char *server_hostname = extract_host_name(new_site);
-
-	struct in_addr server_addr;
-	struct addrinfo server_hints, *server_res, *p;
-
-	memset(&server_hints, 0, sizeof(server_hints));
-	server_hints.ai_socktype = SOCK_STREAM;
-	server_hints.ai_family = AF_INET;
-
-	if ((err = getaddrinfo(server_hostname, "80", &server_hints, &server_res)) != 0)
-	{
-		printf("Error during server getaddrinfo() %d\n", err);
-		return 1;
-	}
-
-	server_addr.S_un = ((struct sockaddr_in *)(server_res->ai_addr))->sin_addr.S_un;
-
-	printf("Server IP address : %s\n", inet_ntoa(server_addr));
-	// ----------------
-
-	// Make a socket using the information received from getaddrinfo
-	int server_sockfd;
-	server_sockfd = socket(server_res->ai_family, server_res->ai_socktype, server_res->ai_protocol);
-
-	// Loop through all the results and connect to the first available
-	for (p = server_res; p != NULL; p = p->ai_next) {
-		if ((server_sockfd = socket(p->ai_family, p->ai_socktype,
-			p->ai_protocol)) == -1) {
-			perror("Error during client socket assignment");
-			continue;
+			printf("Error during getaddrinfo() %d\n", err);
+			return 1;
 		}
 
-		if (connect(server_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+		addr.S_un = ((struct sockaddr_in *)(res->ai_addr))->sin_addr.S_un;
+
+		printf("Local IP address : %s\n\n", inet_ntoa(addr));
+
+		// Make a socket using the information received from getaddrinfo
+		int sockfd;
+		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+		// Bind socket to port
+		if ((err = bind(sockfd, res->ai_addr, res->ai_addrlen)) != 0)
+		{
+			printf("Error during bind() %d\n", err);
+			return 1;
+		}
+		// -----------
+		// ---Listening, accepting---
+		int backlog = 20;
+		if ((err = listen(sockfd, backlog)) != 0)
+		{
+			printf("Error during listen() %d\n", err);
+			return 1;
+		}
+
+		struct sockaddr_storage their_addr;
+		socklen_t addr_size;
+		int newfd;
+		addr_size = sizeof(their_addr);
+		newfd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
+		// --------------------------
+
+		// ---Receiving---
+		char buf[BUFLEN];
+
+		std::string msg = "";
+		int byte_count;
+		int buf_pos = 0;
+		while ((byte_count = recv(newfd, buf, BUFLEN, 0)) != 0)
+		{
+			std::string curr_buf(buf);
+			msg += curr_buf.substr(0, byte_count - 1);
+			buf_pos += byte_count;
+			if (byte_count < BUFLEN)
+			{
+				break;
+			}
+		}
+		bool strange_error = false;
+		if (msg == "")
+		{
+			strange_error = true;
+			std::cout << "Something strange happened, back to listening to browser!\n";
+		}
+		if (!strange_error)
+		{
+			// ---Filtering---
+			set_connection_type(&msg, "close");
+			//match_phrase(msg, "keep-alive");
+			// ---------------
+			msg += "\n";
+			const char *msg_tmp = msg.c_str();
+			char *ch_msg = _strdup(msg_tmp);
+			printf("Intercepted HTTP request with connection set to close:\n%s", ch_msg);
+			// ---------------
+			// ------------CLIENT SIDE------------
+			// Received HTTP GET request ignored (for now)
+			char magic_url[] = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
+			//int url_len = sizeof(magic_url) / sizeof(char);
+			std::string new_site(magic_url);
+			// ---IP Look-up---
+			char *server_hostname = extract_host_name(new_site);
+
+			struct in_addr server_addr;
+			struct addrinfo server_hints, *server_res, *p;
+
+			memset(&server_hints, 0, sizeof(server_hints));
+			server_hints.ai_socktype = SOCK_STREAM;
+			server_hints.ai_family = AF_INET;
+
+			if ((err = getaddrinfo(server_hostname, "80", &server_hints, &server_res)) != 0)
+			{
+				printf("Error during server getaddrinfo() %d\n", err);
+				return 1;
+			}
+
+			server_addr.S_un = ((struct sockaddr_in *)(server_res->ai_addr))->sin_addr.S_un;
+
+			printf("Server IP address : %s\n\n", inet_ntoa(server_addr));
+			// ----------------
+
+			// Make a socket using the information received from getaddrinfo
+			int server_sockfd;
+			server_sockfd = socket(server_res->ai_family, server_res->ai_socktype, server_res->ai_protocol);
+
+			// Loop through all the results and connect to the first available
+			for (p = server_res; p != NULL; p = p->ai_next) {
+				if ((server_sockfd = socket(p->ai_family, p->ai_socktype,
+					p->ai_protocol)) == -1) {
+					perror("Error during client socket assignment");
+					continue;
+				}
+
+				if (connect(server_sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+					closesocket(server_sockfd);
+					perror("Error during client connection to server");
+					continue;
+				}
+
+				break;
+			}
+
+			if (p == NULL) {
+				fprintf(stderr, "Client: failed to connect to web server\n");
+				return 2;
+			}
+
+			// ---Sending---
+			// INNAN DETTA: url-filtrering (+ connection close)
+			int len = strlen(ch_msg);
+			int bytes_sent = send(server_sockfd, ch_msg, len, 0);
+			// -------------
+			// --------------------------
+			// ---Receiving---
+			char server_buf[BUFLEN];
+
+			std::string server_msg = "";
+			int server_byte_count;
+			int server_buf_pos = 0;
+			bool plaintext = false;
+			while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
+			{
+				std::string curr_buf(server_buf);
+				if (is_plaintext(curr_buf))
+				{
+					plaintext = true;
+				}
+				server_msg += curr_buf.substr(0, server_byte_count - 1);
+				server_buf_pos += server_byte_count;
+				if (!plaintext)
+				{
+					const char *server_msg_tmp = server_msg.c_str();
+					char *server_ch_msg = _strdup(server_msg_tmp);
+					int server_len = strlen(server_ch_msg);
+					int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
+				}
+			}
+
+			set_connection_type(&server_msg, "keep-alive");
+			server_msg += "\n";
+			// -----------------------------------
+
+			if (plaintext)
+			{
+				const char *server_msg_tmp = server_msg.c_str();
+				char *server_ch_msg = _strdup(server_msg_tmp);
+				int server_len = strlen(server_ch_msg);
+				int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
+			}
+
+			//printf("HTTP response, with connection set to keep-alive:\n%s", server_ch_msg);
+
+
+			// ---Clean up---
+			freeaddrinfo(server_res);
 			closesocket(server_sockfd);
-			perror("Error during client connection to server");
-			continue;
+			// --------------
 		}
-
-		break;
+		// ---Clean up---
+		freeaddrinfo(res);
+		closesocket(sockfd);
+		closesocket(newfd);
+		// --------------
 	}
-
-	if (p == NULL) {
-		fprintf(stderr, "Client: failed to connect to web server\n");
-		return 2;
-	}
-
-	// ---Sending---
-	// INNAN DETTA: url-filtrering (+ connection close)
-	int len = strlen(ch_msg);
-	int bytes_sent = send(server_sockfd, ch_msg, len, 0);
-	// -------------
-	// --------------------------
-	// ---Receiving---
-	char server_buf[BUFLEN];
-	
-	std::string server_msg = "";
-	int server_byte_count;
-	int server_buf_pos = 0;
-	while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
-	{
-		std::string curr_buf(server_buf);
-		server_msg += curr_buf.substr(server_buf_pos, server_byte_count - 1);
-		server_buf_pos += server_byte_count;
-		/*if (server_byte_count < BUFLEN)
-		{
-			break;
-		}*/
-	}
-	closesocket(server_sockfd);
-	//server_msg += "\n";
-	std::cout << server_msg;
-	// -----------------------------------
-
-	const char *server_msg_tmp = server_msg.c_str();
-	char *server_ch_msg = _strdup(server_msg_tmp);
-	int server_len = strlen(server_ch_msg);
-	int client_bytes_sent = send(sockfd, server_ch_msg, server_len, 0);
 
 	WSACleanup();
 	return 0;
@@ -248,4 +284,14 @@ bool replace(std::string& str, const std::string& from, const std::string& to)
 		return false;
 	str.replace(start_pos, from.length(), to);
 	return true;
+}
+
+bool is_plaintext(std::string str_buf)
+{
+	std::transform(str_buf.begin(), str_buf.end(), str_buf.begin(), ::tolower);
+	size_t start_pos = str_buf.find("content-type: text/plain");
+	if (start_pos == std::string::npos)
+		return false;
+	else
+		return true;
 }
