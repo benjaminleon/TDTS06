@@ -6,12 +6,11 @@
 #include <string>
 #include <algorithm>
 
-#define BUFLEN 60000
+#define BUFLEN 2048
 
 // --------------------------Custom functions--------------------------
 std::string extract_url(std::string msg);
 char *extract_host_name(std::string full_url);
-std::string extract_header(std::string msg);
 int set_connection_type(std::string *msg, std::string type);
 bool replace_str(std::string& str, const std::string& from, const std::string& to);
 bool contains(std::string str_buf, std::string search_str);
@@ -25,12 +24,6 @@ int main()
 
 	char *hostname = "localhost";
 	char *port = "3334"; // Port in browser to listen to.
-
-	// Bad words to look out for.
-	std::string badword1 = "spongebob";
-	std::string badword2 = "britney spears";
-	std::string badword3 = "paris hilton";
-	std::string badword4 = "norrköping";
 
 	struct in_addr addr;
 	struct addrinfo hints, *res;
@@ -48,7 +41,7 @@ int main()
 	}
 
 	addr.S_un = ((struct sockaddr_in *)(res->ai_addr))->sin_addr.S_un;
-	printf("######################### Local IP address: %s ##########################\n", inet_ntoa(addr));
+	printf("################## Local IP address: %s ##################\n", inet_ntoa(addr));
 
 	// Make a socket using the information received from getaddrinfo
 	int sockfd;
@@ -64,8 +57,6 @@ int main()
 
 	while (true)
 	{
-		printf("\n################################# Proxy ready! #################################\n");
-
 		// Listening
 		int backlog = 20;
 		if ((err = listen(sockfd, backlog)) != 0)
@@ -110,27 +101,25 @@ int main()
 
 		if (!strange_error)
 		{
+			// ---Filtering---
 			if (contains(msg, "connection: keep-alive"))
 			{
-				//printf("\n################### HTTP request has connection: keep-alive. ###################\n");
+				printf("\n############# HTTP request has connection type set to keep-alive. ##############\n");
 			}
 			else if (contains(msg, "connection: close"))
 			{
-				//printf("\n################### HTTP request has connection: close. ###################\n");
+				printf("\n############## HTTP request has connection type set to close. ##############\n");
 			}
 			else
 			{
 				printf("\n############## Warning! HTTP request does not have a connection type. ##############\n");
 			}
-
 			set_connection_type(&msg, "close");
-			// ---Filtering---
 
 			// ---------------
 			const char *msg_tmp = msg.c_str();
 			char *ch_msg = _strdup(msg_tmp);
 			printf("\n############ Intercepted HTTP request with connection set to close: ############\n%s", ch_msg);
-			std::cout << "\n" << "Header length:" << msg.length() << "\n";
 			// ---------------
 			// ------------CLIENT SIDE------------
 			// Received HTTP GET request ignored (for now)
@@ -156,7 +145,7 @@ int main()
 
 			server_addr.S_un = ((struct sockaddr_in *)(server_res->ai_addr))->sin_addr.S_un;
 
-			printf("\n###################### Server IP address: %s ######################\n", inet_ntoa(server_addr));
+			printf("\n################## Server IP address: %s ##################\n", inet_ntoa(server_addr));
 			// ----------------
 
 			// Make a socket using the information received from getaddrinfo
@@ -189,7 +178,6 @@ int main()
 			// INNAN DETTA: url-filtrering (+ connection close)
 			int len = strlen(ch_msg);
 			int bytes_sent = send(server_sockfd, ch_msg, len, 0);
-			std::cout << "\n" << "Bytes sent: " << bytes_sent << "\n";
 			// -------------
 			// --------------------------
 			// ---Receiving---
@@ -200,51 +188,36 @@ int main()
 			int server_buf_pos = 0;
 			bool plaintext = false;
 			bool checked_connection_response = false;
-			//printf("\n############## HTTP response, with connection set to keep-alive: ###############\n");
-			bool found_header = false;
 			while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
 			{
 				std::string curr_buf(server_buf);
-				char *curr_bufdffff = new char[server_byte_count];
-				int heeeej = std::strlen(curr_bufdffff);
-				//--------------------------------------------------------------------------------!!!!!!!
 				if (contains(curr_buf, "content-type: text/")) // !!!!!!!!
 				{
 					plaintext = true;
 				}
-				int halluj = curr_buf.length();
 				server_msg += curr_buf.substr(0, server_byte_count);
 				server_buf_pos += server_byte_count;
 				if (!checked_connection_response)
 				{
 					if (contains(msg, "connection: keep-alive"))
 					{
-						//printf("\n################### HTTP response has connection: keep-alive. ##################\n");
+						printf("\n############## HTTP response has connection type set to keep-alive. ##############\n");
 						checked_connection_response = true;
 					}
 					else if (contains(msg, "connection: close"))
 					{
-						//printf("\n#################### HTTP response has connection: close. ####################\n");
+						printf("\n############### HTTP response has connection type set to close. ################\n");
 						checked_connection_response = true;
 					}
 				}
-				//set_connection_type(&server_msg, "keep-alive");
-				std::string header = extract_header(curr_buf);
-				if (header != "error" && !found_header)
-				{
-					std::cout << header << "\n" << "Header size:" << header.length();
-					found_header = true;
-				}
-				std::cout << "\n" << "Received: " << server_byte_count;
-				//std::cout << curr_buf.substr(0, server_byte_count);
+				set_connection_type(&server_msg, "keep-alive");
+				
 				if (!plaintext)
 				{
-					int halloj = server_msg.length();
 					const char *server_msg_tmp = server_msg.c_str();
 					char *server_ch_msg = _strdup(server_msg_tmp);
 					int server_len = strlen(server_ch_msg);
 					int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-					std::cout << "\n Bytes sent to browser: " << server_bytes_sent << "\n";
 				}
 			}
 			// -----------------------------------
@@ -255,17 +228,20 @@ int main()
 				char *server_ch_msg = _strdup(server_msg_tmp);
 				int server_len = strlen(server_ch_msg);
 				int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-				std::cout << "\nBytes sent to browser: " << server_bytes_sent << "\n";
+
+				printf("\n############## HTTP response, with connection set to keep-alive: ###############\n%s", server_ch_msg);
 			}
-			int tmpn = server_msg.length();
+
 
 			// ---Clean up---
 			freeaddrinfo(server_res);
 			closesocket(server_sockfd);
 		}
-		
+
 		// ---Clean up---
 		closesocket(newfd);
+
+		printf("\n#################### Proxy ready! ####################\n");
 	}
 
 	// Final clean up
@@ -341,20 +317,6 @@ char *extract_host_name(std::string full_url)
 	const char *hostname = host.c_str();
 
 	return _strdup(hostname);
-}
-
-std::string extract_header(std::string msg)
-{
-	// Returns HTTP header from a message (packet).
-	size_t header_end = msg.find("\r\n\r\n");
-	if (header_end == std::string::npos)
-	{
-		return "error";
-	}
-	else
-	{
-		return msg.substr(0, header_end + 4);
-	}
 }
 
 int set_connection_type(std::string *msg, std::string type)
