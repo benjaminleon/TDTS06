@@ -195,7 +195,8 @@ int main()
 			// ---Receiving---
 			char server_buf[BUFLEN];
 
-			std::string server_msg = "";
+			std::string text_msg = "";
+			int amount_of_msgs = 0;
 			int server_byte_count;
 			int server_buf_pos = 0;
 			bool plaintext = false;
@@ -205,15 +206,14 @@ int main()
 			while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
 			{
 				std::string curr_buf(server_buf);
-				char *curr_bufdffff = new char[server_byte_count];
-				int heeeej = std::strlen(curr_bufdffff);
+				curr_buf = curr_buf.substr(0, server_byte_count);
+				text_msg += curr_buf;
+				amount_of_msgs++;
 				//--------------------------------------------------------------------------------!!!!!!!
 				if (contains(curr_buf, "content-type: text/")) // !!!!!!!!
 				{
 					plaintext = true;
 				}
-				int halluj = curr_buf.length();
-				server_msg += curr_buf.substr(0, server_byte_count);
 				server_buf_pos += server_byte_count;
 				if (!checked_connection_response)
 				{
@@ -236,28 +236,27 @@ int main()
 					found_header = true;
 				}
 				std::cout << "\n" << "Received: " << server_byte_count;
-				//std::cout << curr_buf.substr(0, server_byte_count);
 				if (!plaintext)
 				{
-					int halloj = server_msg.length();
-					const char *server_msg_tmp = server_msg.c_str();
-					char *server_ch_msg = _strdup(server_msg_tmp);
-					int server_len = strlen(server_ch_msg);
-					int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-					std::cout << "\n Bytes sent to browser: " << server_bytes_sent << "\n";
+					int server_len = server_byte_count; // Change this after filtering!
+					char *curr_buf_ch = server_buf; // Change this after filtering!
+					int server_bytes_sent = send(newfd, curr_buf_ch, server_len, 0);
+					std::cout << "\nBytes sent to browser (not text): " << server_bytes_sent << "\n";
 				}
 			}
 			// -----------------------------------
 
 			if (plaintext)
 			{
-				const char *server_msg_tmp = server_msg.c_str();
+				// Filtering
+				// ---------
+				const char *server_msg_tmp = text_msg.c_str();
 				char *server_ch_msg = _strdup(server_msg_tmp);
 				int server_len = strlen(server_ch_msg);
 				int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-				std::cout << "\nBytes sent to browser: " << server_bytes_sent << "\n";
+				std::cout << "\nBytes sent to browser (text): " << server_bytes_sent << "\n";
+				std::cout << "\nMessage was divided into " << amount_of_msgs << " chunks.\n";
 			}
-			int tmpn = server_msg.length();
 
 			// ---Clean up---
 			freeaddrinfo(server_res);
@@ -409,6 +408,7 @@ bool contains(std::string str_buf, std::string search_str)
 	// Returns true if substring search_str (case insensitive) is found in str_buf.
 	std::transform(str_buf.begin(), str_buf.end(), str_buf.begin(), ::tolower);
 	size_t start_pos = str_buf.find(search_str);
+	int len = str_buf.length();
 	if (start_pos == std::string::npos)
 	{
 		return false;
