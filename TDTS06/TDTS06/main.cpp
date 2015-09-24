@@ -6,7 +6,7 @@
 #include <string>
 #include <algorithm>
 
-#define BUFLEN 60000
+#define BUFLEN 4096
 
 // --------------------------Custom functions--------------------------
 std::string extract_url(std::string msg);
@@ -31,6 +31,8 @@ int main()
 	std::string badword2 = "britney spears";
 	std::string badword3 = "paris hilton";
 	std::string badword4 = "norrköping";
+
+	std::string error_site = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
 
 	struct in_addr addr;
 	struct addrinfo hints, *res;
@@ -125,7 +127,61 @@ int main()
 
 			set_connection_type(&msg, "close");
 			// ---Filtering---
-
+			// If POST, we set it to connection: close, but nothing else.
+			bool is_post = false;
+			if (msg.length() >= 4)
+			{
+				if (msg.substr(0, 4) == "POST")
+				{
+					is_post = true;
+				}
+			}
+			if (is_post)
+			{
+				for (int p = 0; p < 5; p++)
+				{
+					char temp = buf[BUFLEN - 1];
+					for (int n = 0; n < BUFLEN - 1; n++)
+					{
+						buf[n] = buf[n + 1];
+					}
+					buf[BUFLEN - 1] = temp;
+				}
+				byte_count -= 5;
+				set_connection_type(&msg, "close");
+				std::string tempheader = extract_header(msg);
+				int headerlen = tempheader.length();
+				for (int n = 0; n < headerlen; n++)
+				{
+					buf[n] = tempheader.at(n);
+				}
+			}
+			else
+			{
+				// Filtrering av header
+				std::string tempheader = extract_header(msg); // Egentligen onödig, men w/e
+				bool something_bad = contains(msg, badword1) || contains(msg, badword2) || contains(msg, badword3) || contains(msg, badword4);
+				if (something_bad)
+				{
+					// BYT UT NEDAN MOT EN 302
+					//msg = "HTTP/1.1 302 Found\r\nLocation: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n\r\n";
+					
+					std::string intended_url = extract_url(tempheader);
+					std::string intended_host = extract_host_name(intended_url);
+					int intended_url_start = tempheader.find(intended_url);
+					int intended_url_stop = intended_url_start + intended_url.length() - 1;
+					std::string new_header = tempheader.substr(0, intended_url_start);
+					std::string rest_of_header = tempheader.substr(intended_url_stop + 1, tempheader.length() - intended_url_stop);
+					new_header += error_site;
+					int intended_host_start = rest_of_header.find(intended_host);
+					int intended_host_stop = intended_host_start + intended_host.length() - 1;
+					new_header += rest_of_header.substr(0, intended_host_start);
+					new_header += extract_host_name(error_site);
+					rest_of_header = rest_of_header.substr(intended_host_stop + 1, rest_of_header.length() - intended_host_stop);
+					new_header += rest_of_header;
+					msg = new_header;
+				}
+			}
 			// ---------------
 			const char *msg_tmp = msg.c_str();
 			char *ch_msg = _strdup(msg_tmp);
@@ -133,11 +189,6 @@ int main()
 			std::cout << "\n" << "Header length:" << msg.length() << "\n";
 			// ---------------
 			// ------------CLIENT SIDE------------
-			// Received HTTP GET request ignored (for now)
-			///std::string testtest = extract_url(msg);
-			///char magic_url[] = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
-			//int url_len = sizeof(magic_url) / sizeof(char);
-			//std::string new_site(magic_url);
 			// ---IP Look-up---
 			char *server_hostname = extract_host_name(extract_url(msg));
 
@@ -187,8 +238,18 @@ int main()
 
 			// ---Sending---
 			// INNAN DETTA: url-filtrering (+ connection close)
-			int len = strlen(ch_msg);
-			int bytes_sent = send(server_sockfd, ch_msg, len, 0);
+			int bytes_sent;
+			int len;
+			if (is_post)
+			{
+				len = byte_count;
+				bytes_sent = send(server_sockfd, buf, len, 0);
+			}
+			else
+			{
+				len = strlen(ch_msg);
+				bytes_sent = send(server_sockfd, ch_msg, len, 0);
+			}
 			std::cout << "\n" << "Bytes sent: " << bytes_sent << "\n";
 			// -------------
 			// --------------------------
@@ -212,7 +273,10 @@ int main()
 				//--------------------------------------------------------------------------------!!!!!!!
 				if (contains(curr_buf, "content-type: text/")) // !!!!!!!!
 				{
-					plaintext = true;
+					if (!contains(curr_buf, "gzip"))
+					{
+						plaintext = true;
+					}
 				}
 				server_buf_pos += server_byte_count;
 				if (!checked_connection_response)
@@ -408,7 +472,6 @@ bool contains(std::string str_buf, std::string search_str)
 	// Returns true if substring search_str (case insensitive) is found in str_buf.
 	std::transform(str_buf.begin(), str_buf.end(), str_buf.begin(), ::tolower);
 	size_t start_pos = str_buf.find(search_str);
-	int len = str_buf.length();
 	if (start_pos == std::string::npos)
 	{
 		return false;
