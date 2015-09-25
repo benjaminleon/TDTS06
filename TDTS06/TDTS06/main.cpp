@@ -30,9 +30,7 @@ int main()
 	std::string badword1 = "spongebob";
 	std::string badword2 = "britney spears";
 	std::string badword3 = "paris hilton";
-	std::string badword4 = "norrköping";
-
-	std::string error_site = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
+	std::string badword4 = "norrköping";::string error_site = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
 
 	struct in_addr addr;
 	struct addrinfo hints, *res;
@@ -266,7 +264,7 @@ int main()
 			bool found_header = false;
 			while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
 			{
-				std::string curr_buf(server_buf);
+			  std::string curr_buf(server_buf); //Ben. funkar detta verkligen? vad händer vid \0 efter headern?
 				curr_buf = curr_buf.substr(0, server_byte_count);
 				text_msg += curr_buf;
 				amount_of_msgs++;
@@ -283,7 +281,7 @@ int main()
 				{
 					if (contains(msg, "connection: keep-alive"))
 					{
-						//printf("\n################### HTTP response has connection: keep-alive. ##################\n");
+					  //printf("\n################### HTTP response has connection: keep-alive. ##################\n");
 						checked_connection_response = true;
 					}
 					else if (contains(msg, "connection: close"))
@@ -312,14 +310,20 @@ int main()
 
 			if (plaintext)
 			{
-				// Filtering
-				// ---------
-				const char *server_msg_tmp = text_msg.c_str();
-				char *server_ch_msg = _strdup(server_msg_tmp);
-				int server_len = strlen(server_ch_msg);
-				int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-				std::cout << "\nBytes sent to browser (text): " << server_bytes_sent << "\n";
-				std::cout << "\nMessage was divided into " << amount_of_msgs << " chunks.\n";
+			  
+			  // Filtering
+			  if (contains(msg,badword1) || contains(msg,badword2) || contains(msg,badword3) || contains(msg,badword4)) 
+			    { 
+			      text_msg = "HTTP/1.1 302 Found\r\nLocation: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n\r\n"; //Ben
+			      printf("##########Bad word found in plaintext, send 302 found to browser##########");
+			    }
+			  // ---------
+			  const char *server_msg_tmp = text_msg.c_str();
+			  char *server_ch_msg = _strdup(server_msg_tmp);
+			  int server_len = strlen(server_ch_msg);
+			  int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
+			  std::cout << "\nBytes sent to browser (text): " << server_bytes_sent << "\n";
+			  std::cout << "\nMessage was divided into " << amount_of_msgs << " chunks.\n";
 			}
 
 			// ---Clean up---
