@@ -19,7 +19,7 @@ bool contains(std::string str_buf, std::string search_str);
 
 int main()
 {
-	// -------------------------------Setup-------------------------------
+	// Setup.
 	WSADATA data;
 	WSAStartup(MAKEWORD(2, 0), &data);
 
@@ -30,7 +30,9 @@ int main()
 	std::string badword1 = "spongebob";
 	std::string badword2 = "britney spears";
 	std::string badword3 = "paris hilton";
-	std::string badword4 = "norrköping";::string error_site = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
+	std::string badword4 = "norrköping";
+
+	std::string error_site = "http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html";
 
 	struct in_addr addr;
 	struct addrinfo hints, *res;
@@ -40,7 +42,7 @@ int main()
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_family = AF_INET;
 
-	// ---Get info about the browser---
+	// Get info about the browser.
 	if ((err = getaddrinfo(hostname, port, &hints, &res)) != 0)
 	{
 		printf("Error during getaddrinfo() %d\n", err);
@@ -50,23 +52,23 @@ int main()
 	addr.S_un = ((struct sockaddr_in *)(res->ai_addr))->sin_addr.S_un;
 	printf("######################### Local IP address: %s ##########################\n", inet_ntoa(addr));
 
-	// Make a socket using the information received from getaddrinfo
+	// Make a socket using the information received from getaddrinfo.
 	int sockfd;
 	sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
-	// Bind socket to port
+	// Bind socket to port.
 	if ((err = bind(sockfd, res->ai_addr, res->ai_addrlen)) != 0)
 	{
 		printf("Error during bind() %d\n", err);
 		return 1;
 	}
-	// -------------------------------------------------------------------
 
+	// ------------------------------------------------SERVER SIDE------------------------------------------------
 	while (true)
 	{
 		printf("\n################################# Proxy ready! #################################\n");
 
-		// Listening
+		// Listening.
 		int backlog = 20;
 		if ((err = listen(sockfd, backlog)) != 0)
 		{
@@ -74,14 +76,14 @@ int main()
 			return 1;
 		}
 
-		// Accepting
+		// Accepting.
 		struct sockaddr_storage their_addr;
 		socklen_t addr_size;
 		int newfd;
 		addr_size = sizeof(their_addr);
 		newfd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
-		
-		// Receiving
+
+		// Receiving.
 		char buf[BUFLEN];
 		std::string msg = "";
 		int byte_count;
@@ -112,19 +114,19 @@ int main()
 		{
 			if (contains(msg, "connection: keep-alive"))
 			{
-				//printf("\n################### HTTP request has connection: keep-alive. ###################\n");
+				printf("\n################### HTTP request has connection: keep-alive. ###################\n");
 			}
 			else if (contains(msg, "connection: close"))
 			{
-				//printf("\n################### HTTP request has connection: close. ###################\n");
+				printf("\n################### HTTP request has connection: close. ###################\n");
 			}
 			else
 			{
 				printf("\n############## Warning! HTTP request does not have a connection type. ##############\n");
 			}
-
 			set_connection_type(&msg, "close");
-			// ---Filtering---
+
+			// Filtering.
 			// If POST, we set it to connection: close, but nothing else.
 			bool is_post = false;
 			if (msg.length() >= 4)
@@ -156,14 +158,12 @@ int main()
 			}
 			else
 			{
-				// Filtrering av header
-				std::string tempheader = extract_header(msg); // Egentligen onödig, men w/e
+				// Request header filtering.
+				std::string tempheader = extract_header(msg); // Should be the same as msg, but just in case.
 				bool something_bad = contains(msg, badword1) || contains(msg, badword2) || contains(msg, badword3) || contains(msg, badword4);
 				if (something_bad)
 				{
-					// BYT UT NEDAN MOT EN 302
-					//msg = "HTTP/1.1 302 Found\r\nLocation: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n\r\n";
-					
+					// Reforms the header into a modified one, instead heading for the error site.
 					std::string intended_url = extract_url(tempheader);
 					std::string intended_host = extract_host_name(intended_url);
 					int intended_url_start = tempheader.find(intended_url);
@@ -180,39 +180,32 @@ int main()
 					msg = new_header;
 				}
 			}
-			// ---------------
 			const char *msg_tmp = msg.c_str();
 			char *ch_msg = _strdup(msg_tmp);
 			printf("\n############ Intercepted HTTP request with connection set to close: ############\n%s", ch_msg);
 			std::cout << "\n" << "Header length:" << msg.length() << "\n";
-			// ---------------
-			// ------------CLIENT SIDE------------
-			// ---IP Look-up---
+			// -----------------------------------------------------------------------------------------------------------
+			// ------------------------------------------------CLIENT SIDE------------------------------------------------
+			// IP Look-up.
 			char *server_hostname = extract_host_name(extract_url(msg));
-
 			struct in_addr server_addr;
 			struct addrinfo server_hints, *server_res, *p;
-
 			memset(&server_hints, 0, sizeof(server_hints));
 			server_hints.ai_socktype = SOCK_STREAM;
 			server_hints.ai_family = AF_INET;
-
 			if ((err = getaddrinfo(server_hostname, "80", &server_hints, &server_res)) != 0)
 			{
 				printf("Error during server getaddrinfo() %d\n", err);
 				return 1;
 			}
-
 			server_addr.S_un = ((struct sockaddr_in *)(server_res->ai_addr))->sin_addr.S_un;
-
 			printf("\n###################### Server IP address: %s ######################\n", inet_ntoa(server_addr));
-			// ----------------
 
-			// Make a socket using the information received from getaddrinfo
+			// Make a socket using the information received from getaddrinfo.
 			int server_sockfd;
 			server_sockfd = socket(server_res->ai_family, server_res->ai_socktype, server_res->ai_protocol);
 
-			// Loop through all the results and connect to the first available
+			// Loop through all the results and connect to the first available.
 			for (p = server_res; p != NULL; p = p->ai_next) {
 				if ((server_sockfd = socket(p->ai_family, p->ai_socktype,
 					p->ai_protocol)) == -1) {
@@ -234,8 +227,7 @@ int main()
 				return 2;
 			}
 
-			// ---Sending---
-			// INNAN DETTA: url-filtrering (+ connection close)
+			// Sending.
 			int bytes_sent;
 			int len;
 			if (is_post)
@@ -249,27 +241,24 @@ int main()
 				bytes_sent = send(server_sockfd, ch_msg, len, 0);
 			}
 			std::cout << "\n" << "Bytes sent: " << bytes_sent << "\n";
-			// -------------
-			// --------------------------
-			// ---Receiving---
-			char server_buf[BUFLEN];
 
+			// Receiving.
+			char server_buf[BUFLEN];
 			std::string text_msg = "";
 			int amount_of_msgs = 0;
 			int server_byte_count;
 			int server_buf_pos = 0;
 			bool plaintext = false;
 			bool checked_connection_response = false;
-			//printf("\n############## HTTP response, with connection set to keep-alive: ###############\n");
+			printf("\n############## HTTP response, with connection set to keep-alive: ###############\n");
 			bool found_header = false;
 			while ((server_byte_count = recv(server_sockfd, server_buf, BUFLEN, 0)) != 0)
 			{
-			  std::string curr_buf(server_buf); //Ben. funkar detta verkligen? vad händer vid \0 efter headern?
+				std::string curr_buf(server_buf);
 				curr_buf = curr_buf.substr(0, server_byte_count);
 				text_msg += curr_buf;
 				amount_of_msgs++;
-				//--------------------------------------------------------------------------------!!!!!!!
-				if (contains(curr_buf, "content-type: text/")) // !!!!!!!!
+				if (contains(curr_buf, "content-type: text/"))
 				{
 					if (!contains(curr_buf, "gzip"))
 					{
@@ -281,16 +270,15 @@ int main()
 				{
 					if (contains(msg, "connection: keep-alive"))
 					{
-					  //printf("\n################### HTTP response has connection: keep-alive. ##################\n");
+						printf("\n################### HTTP response has connection: keep-alive. ##################\n");
 						checked_connection_response = true;
 					}
 					else if (contains(msg, "connection: close"))
 					{
-						//printf("\n#################### HTTP response has connection: close. ####################\n");
+						printf("\n#################### HTTP response has connection: close. ####################\n");
 						checked_connection_response = true;
 					}
 				}
-				//set_connection_type(&server_msg, "keep-alive");
 				std::string header = extract_header(curr_buf);
 				if (header != "error" && !found_header)
 				{
@@ -298,44 +286,44 @@ int main()
 					found_header = true;
 				}
 				std::cout << "\n" << "Received: " << server_byte_count;
+
+				// If not text, the message is passed through right away.
 				if (!plaintext)
 				{
-					int server_len = server_byte_count; // Change this after filtering!
-					char *curr_buf_ch = server_buf; // Change this after filtering!
+					int server_len = server_byte_count;
+					char *curr_buf_ch = server_buf;
 					int server_bytes_sent = send(newfd, curr_buf_ch, server_len, 0);
 					std::cout << "\nBytes sent to browser (not text): " << server_bytes_sent << "\n";
 				}
 			}
-			// -----------------------------------
 
 			if (plaintext)
 			{
-			  
-			  // Filtering
-			  if (contains(msg,badword1) || contains(msg,badword2) || contains(msg,badword3) || contains(msg,badword4)) 
-			    { 
-			      text_msg = "HTTP/1.1 302 Found\r\nLocation: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n\r\n"; //Ben
-			      printf("##########Bad word found in plaintext, send 302 found to browser##########");
-			    }
-			  // ---------
-			  const char *server_msg_tmp = text_msg.c_str();
-			  char *server_ch_msg = _strdup(server_msg_tmp);
-			  int server_len = strlen(server_ch_msg);
-			  int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
-			  std::cout << "\nBytes sent to browser (text): " << server_bytes_sent << "\n";
-			  std::cout << "\nMessage was divided into " << amount_of_msgs << " chunks.\n";
+				// Filtering.
+				if (contains(text_msg, badword1) || contains(text_msg, badword2) || contains(text_msg, badword3) || contains(text_msg, badword4))
+				{
+					text_msg = "HTTP/1.1 302 Found\r\nLocation: http://www.ida.liu.se/~TDTS04/labs/2011/ass2/error1.html\r\n\r\n";
+					printf("\n######### Bad word found in plaintext, sent 302 found to browser #########\n");
+				}
+				const char *server_msg_tmp = text_msg.c_str();
+				char *server_ch_msg = _strdup(server_msg_tmp);
+				int server_len = strlen(server_ch_msg);
+				int server_bytes_sent = send(newfd, server_ch_msg, server_len, 0);
+				std::cout << "\nBytes sent to browser (text): " << server_bytes_sent << "\n";
+				std::cout << "\nMessage was divided into " << amount_of_msgs << " chunks.\n";
 			}
 
-			// ---Clean up---
+			// Clean up.
 			freeaddrinfo(server_res);
 			closesocket(server_sockfd);
+			// -----------------------------------------------------------------------------------------------------------
 		}
-		
-		// ---Clean up---
+
+		// Clean up.
 		closesocket(newfd);
 	}
 
-	// Final clean up
+	// Final clean up.
 	freeaddrinfo(res);
 	closesocket(sockfd);
 	WSACleanup();
